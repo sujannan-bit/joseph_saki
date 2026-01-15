@@ -75,8 +75,8 @@
         <div class="logo">Foodie.AI</div>
         <div class="subtitle">Saki 美食資料庫 / 雲端同步版</div>
         <div class="sync-status" id="sync-status">連接中...</div>
-        <button id="debug-btn" onclick="toggleDebug()" style="position:fixed; top:10px; right:10px; background:#ddd; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:0.7rem; z-index:999;">🔍 診斷</button>
         <div id="debug-log" style="position:fixed; bottom:0; right:0; width:350px; height:300px; background:#000; color:#0f0; font-family:monospace; font-size:0.65rem; overflow-y:auto; padding:10px; border:1px solid #0f0; display:none; z-index:1000; box-shadow:0 0 10px rgba(0,0,0,0.8); border-radius:4px 4px 0 0; margin:10px;">
+            <div style="margin-bottom:5px; padding-bottom:5px; border-bottom:1px solid #0f0; font-weight:bold;">🔧 診斷窗口 (按 Ctrl+Shift+T 關閉)</div>
             <div id="debug-content"></div>
         </div>
     </nav>
@@ -198,6 +198,14 @@
         const debug = document.getElementById('debug-log');
         debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
     }
+    
+    // 快捷键：CTRL+SHIFT+T 打开诊断窗口
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') {
+            e.preventDefault();
+            toggleDebug();
+        }
+    });
     
     // ============================================================================
     // Saki 美食手帳 - Foodie.AI v2.0 (Supabase 實時雲端同步版)
