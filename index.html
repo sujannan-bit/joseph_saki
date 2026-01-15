@@ -179,16 +179,15 @@
 </div>
 
 <script>
-    // === 使用 GitHub Gist API 作為真實雲端存儲 ===
-    // 完全免費，無需額外配置，直接使用公開 Gist API
+    // ============================================================================
+    // Saki 美食手帳 - Foodie.AI v2.0 (Supabase 實時雲端同步版)
+    // ============================================================================
+
+    // 📋 配置區域
+    const SUPABASE_URL = "https://febybjerrksqgqffjcfj.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZlYnliamVycmtzcWdxZmZqY2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0ODQ5NzAsImV4cCI6MjA4NDA2MDk3MH0.IAZ8ZHmLtQVX2n91sEdUCyOWEAtdzFxZCaIE31CmUmA";
     
-    // === Supabase 實時資料庫設置 ===
-    // 需要用戶自己設置 Supabase，詳見文件末尾的設置說明
-    
-    // 這些值需要用戶從 Supabase Dashboard 獲取
-    const SUPABASE_URL = "https://febybjerrksqgqffjcfj.supabase.co";  // 例如: https://xxxxx.supabase.co
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZlYnliamVycmtzcWdxZmZqY2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0ODQ5NzAsImV4cCI6MjA4NDA2MDk3MH0.IAZ8ZHmLtQVX2n91sEdUCyOWEAtdzFxZCaIE31CmUmA";  // 可匿名金鑰
-    
+    // 🔧 全局變量
     let rests = [];
     let picky = [];
     let currentTab = 'all';
@@ -196,16 +195,19 @@
     let isInitialized = false;
     let userId = null;
     
-    // 初始化 Supabase
+    // ============================================================================
+    // ☁️ Supabase 雲端同步核心函數
+    // ============================================================================
+    
     document.addEventListener('DOMContentLoaded', async () => {
         await initSupabase();
     });
 
     async function initSupabase() {
         try {
-            // 檢查是否有有效的 Supabase 配置
+            // 檢查配置有效性
             if (!SUPABASE_URL.includes('supabase.co') || !SUPABASE_KEY) {
-                console.warn('Supabase 未正確配置，使用本地存儲');
+                console.warn('⚠️ Supabase 未正確配置，使用本地存儲');
                 loadLocalData();
                 updateSyncStatus('offline');
                 isInitialized = true;
@@ -217,28 +219,28 @@
             // 初始化 Supabase 客戶端
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
             
-            // 生成或載入用戶 ID
+            // 生成裝置 ID
             userId = localStorage.getItem('SAKI_USER_ID');
             if (!userId) {
                 userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('SAKI_USER_ID', userId);
             }
             
-            // 首次載入本地數據
+            // 載入本地數據
             loadLocalData();
             renderRests();
             renderPicky();
             
-            // 從 Supabase 同步數據
+            // 同步雲端數據
             await syncFromSupabase();
             
-            // 訂閱實時變更
+            // 訂閱實時更新
             subscribeToChanges();
             
             isInitialized = true;
             updateSyncStatus('connected');
         } catch(e) {
-            console.error('Supabase 初始化失敗:', e);
+            console.error('❌ Supabase 初始化失敗:', e);
             loadLocalData();
             updateSyncStatus('offline');
             isInitialized = true;
@@ -249,7 +251,6 @@
         if (!supabase) return;
         
         try {
-            // 從 Supabase 讀取最新數據
             const { data: restsData, error: restsError } = await supabase
                 .from('restaurant_data')
                 .select('*')
@@ -269,7 +270,7 @@
             
             updateSyncStatus('connected');
         } catch(e) {
-            console.error('Supabase 同步失敗:', e);
+            console.error('❌ Supabase 同步失敗:', e);
             updateSyncStatus('error');
         }
     }
@@ -277,11 +278,10 @@
     function subscribeToChanges() {
         if (!supabase) return;
         
-        // 訂閱 restaurant_data 表的實時更新
         const subscription = supabase
             .from('restaurant_data')
             .on('*', (payload) => {
-                console.log('收到雲端更新:', payload);
+                console.log('📲 收到雲端更新');
                 syncFromSupabase();
             })
             .subscribe();
@@ -311,11 +311,15 @@
             saveLocalData();
             updateSyncStatus('connected');
         } catch(e) {
-            console.error('保存到 Supabase 失敗:', e);
+            console.error('❌ 保存到 Supabase 失敗:', e);
             saveLocalData();
             updateSyncStatus('error');
         }
     }
+
+    // ============================================================================
+    // 💾 本地存儲函數
+    // ============================================================================
 
     function loadLocalData() {
         try {
@@ -324,7 +328,7 @@
             if (localRests) rests = JSON.parse(localRests);
             if (localPicky) picky = JSON.parse(localPicky);
         } catch(e) {
-            console.log('本地數據載入失敗');
+            console.log('⚠️ 本地數據載入失敗');
         }
     }
 
@@ -333,7 +337,7 @@
             localStorage.setItem('SAKI_RESTS', JSON.stringify(rests));
             localStorage.setItem('SAKI_PICKY', JSON.stringify(picky));
         } catch(e) {
-            console.log('本地存儲失敗');
+            console.log('⚠️ 本地存儲失敗');
         }
     }
 
@@ -351,26 +355,10 @@
         }
     }
 
-    function updateSyncStatus(isConnected) {
-        const status = document.getElementById('sync-status');
-        if (isConnected) {
-            status.innerText = '✓ 已同步 (' + new Date().toLocaleTimeString('zh-TW') + ')';
-            status.style.color = '#7FB2BB';
-        } else {
-            status.innerText = '⚠ 本地模式 (自動同步中...)';
-            status.style.color = '#d4622f';
-        }
-    }
+    // ============================================================================
+    // 📦 餐廳管理 (CRUD 操作)
+    // ============================================================================
 
-    // === 分頁與篩選 ===
-    function setTab(tab, btn) {
-        currentTab = tab;
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        renderRests();
-    }
-
-    // === 餐廳管理 ===
     async function saveRest() {
         const id = document.getElementById('edit-id').value;
         const name = document.getElementById('restName').value;
@@ -397,7 +385,6 @@
         await saveToSupabase();
         renderRests();
         toggleForm();
-    }
     }
 
     function renderRests() {
@@ -452,7 +439,10 @@
         }
     }
 
-    // === 偏食區管理 ===
+    // ============================================================================
+    // 🚫 偏食區管理
+    // ============================================================================
+
     async function addPicky() {
         const val = document.getElementById('picky-input').value.trim();
         if(val) {
@@ -481,7 +471,10 @@
         renderPicky();
     }
 
-    // === 同步搬家 ===
+    // ============================================================================
+    // 🔄 數據備份與匯入
+    // ============================================================================
+
     function exportData() {
         const str = JSON.stringify({ r: rests, p: picky });
         navigator.clipboard.writeText(str).then(() => {
@@ -509,7 +502,17 @@
         } catch(e) { alert('格式不正確！'); }
     }
 
-    // === UI 控制 ===
+    // ============================================================================
+    // 🎨 UI 控制與分頁
+    // ============================================================================
+
+    function setTab(tab, btn) {
+        currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderRests();
+    }
+
     function toggleForm(forceOpen) {
         const f = document.getElementById('add-form');
         if(forceOpen) f.classList.remove('hidden');
@@ -526,12 +529,17 @@
         document.getElementById('suScore').value = 5;
     }
 
+    // ============================================================================
+    // 🤖 AI 搜尋 (隨機推薦引擎)
+    // ============================================================================
+
     function startGeminiSearch() {
         document.getElementById('overlay').classList.remove('hidden');
         document.getElementById('ai-loading').classList.remove('hidden');
         document.getElementById('ai-result-content').classList.add('hidden');
         
         setTimeout(() => {
+            // 篩選：排除偏食清單中的餐廳
             const pool = rests.filter(r => !picky.some(p => r.name.includes(p)));
             const winner = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : rests[Math.floor(Math.random() * rests.length)];
             
