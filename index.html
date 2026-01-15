@@ -200,95 +200,129 @@
     // ============================================================================
     
     document.addEventListener('DOMContentLoaded', async () => {
+        console.log('🚀 应用启动...');
         await initSupabase();
     });
 
     async function initSupabase() {
         try {
-            // 檢查配置有效性
-            if (!SUPABASE_URL.includes('supabase.co') || !SUPABASE_KEY) {
-                console.warn('⚠️ Supabase 未正確配置，使用本地存儲');
-                loadLocalData();
-                updateSyncStatus('offline');
-                isInitialized = true;
-                renderRests();
-                renderPicky();
-                return;
+            console.log('📡 检查 Supabase 配置...');
+            
+            // 检查配置有效性
+            if (!SUPABASE_URL || !SUPABASE_KEY || !SUPABASE_URL.includes('supabase.co')) {
+                throw new Error('Supabase 配置无效');
             }
             
-            // 初始化 Supabase 客戶端
+            // 检查 SDK 是否加载
+            if (!window.supabase) {
+                throw new Error('Supabase SDK 未加载');
+            }
+            
+            console.log('✅ SDK 已加载，初始化客户端...');
+            
+            // 初始化 Supabase 客户端
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
             
-            // 生成裝置 ID
+            console.log('✅ 客户端初始化完成');
+            
+            // 生成装置 ID
             userId = localStorage.getItem('SAKI_USER_ID');
             if (!userId) {
                 userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 localStorage.setItem('SAKI_USER_ID', userId);
+                console.log('📱 生成新装置 ID:', userId);
             }
             
-            // 載入本地數據
+            // 载入本地数据
+            console.log('💾 载入本地数据...');
             loadLocalData();
             renderRests();
             renderPicky();
             
-            // 同步雲端數據
+            // 同步云端数据
+            console.log('☁️ 同步云端数据...');
             await syncFromSupabase();
             
-            // 訂閱實時更新
-            subscribeToChanges();
+            // 设置定期轮询（不使用不稳定的实时订阅）
+            console.log('🔄 启动定期轮询（每 10 秒检查一次）...');
+            setInterval(syncFromSupabase, 10000);
             
             isInitialized = true;
             updateSyncStatus('connected');
+            console.log('✅ Supabase 初始化成功！');
+            
         } catch(e) {
-            console.error('❌ Supabase 初始化失敗:', e);
+            console.error('❌ Supabase 初始化失败:', e.message);
+            console.error('详细信息:', e);
+            
+            // 使用本地数据模式
             loadLocalData();
+            renderRests();
+            renderPicky();
             updateSyncStatus('offline');
             isInitialized = true;
+            console.log('💾 已切换到本地数据模式');
         }
     }
 
     async function syncFromSupabase() {
-        if (!supabase) return;
+        if (!supabase) {
+            console.log('⚠️ Supabase 客户端未初始化');
+            return;
+        }
         
         try {
-            const { data: restsData, error: restsError } = await supabase
+            console.log('🔄 正在同步云端数据...');
+            
+            // 添加 5 秒超时
+            const syncPromise = supabase
                 .from('restaurant_data')
                 .select('*')
                 .order('timestamp', { ascending: false })
                 .limit(1);
             
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('同步超时')), 5000)
+            );
+            
+            const result = await Promise.race([syncPromise, timeoutPromise]);
+            const { data: restsData, error: restsError } = result;
+            
             if (restsError) throw restsError;
             
             if (restsData && restsData.length > 0) {
                 const latestData = restsData[0];
-                rests = latestData.rests || [];
-                picky = latestData.picky || [];
-                renderRests();
-                renderPicky();
+                const newRests = latestData.rests || [];
+                const newPicky = latestData.picky || [];
+                
+                // 只有数据有变化才更新
+                if (JSON.stringify(newRests) !== JSON.stringify(rests)) {
+                    console.log('📥 收到新的餐厅数据');
+                    rests = newRests;
+                    renderRests();
+                }
+                
+                if (JSON.stringify(newPicky) !== JSON.stringify(picky)) {
+                    console.log('📥 收到新的偏食数据');
+                    picky = newPicky;
+                    renderPicky();
+                }
+                
                 saveLocalData();
+            } else {
+                console.log('📭 云端暂无数据');
             }
             
             updateSyncStatus('connected');
         } catch(e) {
-            console.error('❌ Supabase 同步失敗:', e);
-            updateSyncStatus('error');
+            console.warn('⚠️ 同步出错:', e.message);
+            // 不改变状态，继续尝试
         }
     }
 
-    function subscribeToChanges() {
-        if (!supabase) return;
-        
-        const subscription = supabase
-            .from('restaurant_data')
-            .on('*', (payload) => {
-                console.log('📲 收到雲端更新');
-                syncFromSupabase();
-            })
-            .subscribe();
-    }
-
-    async function saveToSupabase() {
+async function saveToSupabase() {
         if (!supabase || !isInitialized) {
+            console.log('💾 离线模式：保存到本地');
             saveLocalData();
             return;
         }
@@ -302,20 +336,29 @@
                 device_info: navigator.userAgent
             };
             
-            const { error } = await supabase
+            console.log('☁️ 上传数据到 Supabase...');
+            
+            // 添加超时
+            const savePromise = supabase
                 .from('restaurant_data')
                 .insert([dataToSave], { returning: 'minimal' });
+            
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('上传超时')), 5000)
+            );
+            
+            const result = await Promise.race([savePromise, timeoutPromise]);
+            const { error } = result;
             
             if (error) throw error;
             
             saveLocalData();
+            console.log('✅ 数据已上传');
             updateSyncStatus('connected');
         } catch(e) {
-            console.error('❌ 保存到 Supabase 失敗:', e);
+            console.warn('⚠️ 上传失败，已保存到本地:', e.message);
             saveLocalData();
-            updateSyncStatus('error');
-        }
-    }
+            updateSyncStatus('offline');
 
     // ============================================================================
     // 💾 本地存儲函數
