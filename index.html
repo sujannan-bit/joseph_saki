@@ -183,7 +183,14 @@
 </div>
 
 <script>
-    let debugLogs = [];
+    // 🔧 全局變量
+    var rests = [];
+    var picky = [];
+    var currentTab = 'all';
+    var supabase = null;
+    var isInitialized = false;
+    var userId = null;
+    var debugLogs = [];
     
     function addDebugLog(msg) {
         debugLogs.push('[' + new Date().toLocaleTimeString('zh-TW') + '] ' + msg);
@@ -206,22 +213,6 @@
             toggleDebug();
         }
     });
-    
-    // ============================================================================
-    // Saki 美食手帳 - Foodie.AI v2.0 (Supabase 實時雲端同步版)
-    // ============================================================================
-
-    // 📋 配置區域
-    const SUPABASE_URL = "https://febybjerrksqgqffjcfj.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZlYnliamVycmtzcWdxZmZqY2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0ODQ5NzAsImV4cCI6MjA4NDA2MDk3MH0.IAZ8ZHmLtQVX2n91sEdUCyOWEAtdzFxZCaIE31CmUmA";
-    
-    // 🔧 全局變量
-    let rests = [];
-    let picky = [];
-    let currentTab = 'all';
-    let supabase = null;
-    let isInitialized = false;
-    let userId = null;
     
     // ============================================================================
     // ☁️ Supabase 雲端同步核心函數
