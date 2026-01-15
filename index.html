@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saki 美食手帳 | Foodie.AI</title>
+    
+    <!-- Supabase JavaScript SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
         /* CSS 視覺層 - 日系極簡美學 */
         @import url('https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Noto+Serif+TC:wght@500;700&display=swap');
@@ -178,21 +182,140 @@
     // === 使用 GitHub Gist API 作為真實雲端存儲 ===
     // 完全免費，無需額外配置，直接使用公開 Gist API
     
-    // === 雲端存儲設置 ===
-    // 使用 localStorage 作為主要存儲，每 2 秒檢查一次是否有其他設備的更新
-    // 同步狀態只顯示「本地已存儲」而非虛假的「雲端已同步」
+    // === Supabase 實時資料庫設置 ===
+    // 需要用戶自己設置 Supabase，詳見文件末尾的設置說明
+    
+    // 這些值需要用戶從 Supabase Dashboard 獲取
+    const SUPABASE_URL = "YOUR_SUPABASE_URL";  // 例如: https://xxxxx.supabase.co
+    const SUPABASE_KEY = "YOUR_SUPABASE_KEY";  // 可匿名金鑰
     
     let rests = [];
     let picky = [];
     let currentTab = 'all';
+    let supabase = null;
+    let isInitialized = false;
+    let userId = null;
     
-    // 初始化 - 載入本地數據
-    document.addEventListener('DOMContentLoaded', () => {
-        loadLocalData();
-        renderRests();
-        renderPicky();
-        updateSyncStatus('ready');
+    // 初始化 Supabase
+    document.addEventListener('DOMContentLoaded', async () => {
+        await initSupabase();
     });
+
+    async function initSupabase() {
+        try {
+            // 檢查是否有有效的 Supabase 配置
+            if (!SUPABASE_URL.includes('supabase.co') || !SUPABASE_KEY) {
+                console.warn('Supabase 未正確配置，使用本地存儲');
+                loadLocalData();
+                updateSyncStatus('offline');
+                isInitialized = true;
+                renderRests();
+                renderPicky();
+                return;
+            }
+            
+            // 初始化 Supabase 客戶端
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            
+            // 生成或載入用戶 ID
+            userId = localStorage.getItem('SAKI_USER_ID');
+            if (!userId) {
+                userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem('SAKI_USER_ID', userId);
+            }
+            
+            // 首次載入本地數據
+            loadLocalData();
+            renderRests();
+            renderPicky();
+            
+            // 從 Supabase 同步數據
+            await syncFromSupabase();
+            
+            // 訂閱實時變更
+            subscribeToChanges();
+            
+            isInitialized = true;
+            updateSyncStatus('connected');
+        } catch(e) {
+            console.error('Supabase 初始化失敗:', e);
+            loadLocalData();
+            updateSyncStatus('offline');
+            isInitialized = true;
+        }
+    }
+
+    async function syncFromSupabase() {
+        if (!supabase) return;
+        
+        try {
+            // 從 Supabase 讀取最新數據
+            const { data: restsData, error: restsError } = await supabase
+                .from('restaurant_data')
+                .select('*')
+                .order('timestamp', { ascending: false })
+                .limit(1);
+            
+            if (restsError) throw restsError;
+            
+            if (restsData && restsData.length > 0) {
+                const latestData = restsData[0];
+                rests = latestData.rests || [];
+                picky = latestData.picky || [];
+                renderRests();
+                renderPicky();
+                saveLocalData();
+            }
+            
+            updateSyncStatus('connected');
+        } catch(e) {
+            console.error('Supabase 同步失敗:', e);
+            updateSyncStatus('error');
+        }
+    }
+
+    function subscribeToChanges() {
+        if (!supabase) return;
+        
+        // 訂閱 restaurant_data 表的實時更新
+        const subscription = supabase
+            .from('restaurant_data')
+            .on('*', (payload) => {
+                console.log('收到雲端更新:', payload);
+                syncFromSupabase();
+            })
+            .subscribe();
+    }
+
+    async function saveToSupabase() {
+        if (!supabase || !isInitialized) {
+            saveLocalData();
+            return;
+        }
+        
+        try {
+            const dataToSave = {
+                user_id: userId,
+                rests: rests,
+                picky: picky,
+                timestamp: new Date().toISOString(),
+                device_info: navigator.userAgent
+            };
+            
+            const { error } = await supabase
+                .from('restaurant_data')
+                .insert([dataToSave], { returning: 'minimal' });
+            
+            if (error) throw error;
+            
+            saveLocalData();
+            updateSyncStatus('connected');
+        } catch(e) {
+            console.error('保存到 Supabase 失敗:', e);
+            saveLocalData();
+            updateSyncStatus('error');
+        }
+    }
 
     function loadLocalData() {
         try {
@@ -209,7 +332,6 @@
         try {
             localStorage.setItem('SAKI_RESTS', JSON.stringify(rests));
             localStorage.setItem('SAKI_PICKY', JSON.stringify(picky));
-            updateSyncStatus('saved');
         } catch(e) {
             console.log('本地存儲失敗');
         }
@@ -217,15 +339,15 @@
 
     function updateSyncStatus(state) {
         const status = document.getElementById('sync-status');
-        if (state === 'saved') {
-            status.innerText = '✓ 已在本機存儲';
+        if (state === 'connected') {
+            status.innerText = '✓ 雲端已連接 (' + new Date().toLocaleTimeString('zh-TW') + ')';
             status.style.color = '#7FB2BB';
-        } else if (state === 'ready') {
-            status.innerText = '✓ 準備就緒';
-            status.style.color = '#7FB2BB';
-        } else {
-            status.innerText = '💾 本機存儲';
-            status.style.color = '#999';
+        } else if (state === 'offline') {
+            status.innerText = '💾 本機模式 (Supabase 未設置)';
+            status.style.color = '#d4622f';
+        } else if (state === 'error') {
+            status.innerText = '⚠ 同步出錯 (使用本地)';
+            status.style.color = '#e67e22';
         }
     }
 
@@ -249,7 +371,7 @@
     }
 
     // === 餐廳管理 ===
-    function saveRest() {
+    async function saveRest() {
         const id = document.getElementById('edit-id').value;
         const name = document.getElementById('restName').value;
         if(!name) return alert('店名是必填的喔！');
@@ -272,9 +394,10 @@
             rests.push(newRest);
         }
         
-        saveLocalData();
+        await saveToSupabase();
         renderRests();
         toggleForm();
+    }
     }
 
     function renderRests() {
@@ -321,20 +444,20 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function deleteRest(id) {
+    async function deleteRest(id) {
         if(confirm('確定要刪除這間餐廳嗎？')) {
             rests = rests.filter(r => r.id !== id);
-            saveLocalData();
+            await saveToSupabase();
             renderRests();
         }
     }
 
     // === 偏食區管理 ===
-    function addPicky() {
+    async function addPicky() {
         const val = document.getElementById('picky-input').value.trim();
         if(val) {
             picky.push(val);
-            saveLocalData();
+            await saveToSupabase();
             document.getElementById('picky-input').value = '';
             renderPicky();
         }
@@ -346,7 +469,7 @@
         ).join('');
     }
 
-    function editPicky(i) {
+    async function editPicky(i) {
         const n = prompt('修改內容 (留空則刪除)：', picky[i]);
         if(n === null) return;
         if(n.trim() === "") {
@@ -354,7 +477,7 @@
         } else {
             picky[i] = n;
         }
-        saveLocalData();
+        await saveToSupabase();
         renderPicky();
     }
 
@@ -368,7 +491,7 @@
         });
     }
 
-    function importData() {
+    async function importData() {
         const str = prompt('請貼入備份代碼：');
         if(!str) return;
         try {
@@ -377,7 +500,7 @@
                 if(confirm('匯入將覆蓋現有資料，確定嗎？')) {
                     rests = data.r;
                     picky = data.p || [];
-                    saveLocalData();
+                    await saveToSupabase();
                     renderRests();
                     renderPicky();
                     alert('✅ 匯入成功！');
@@ -429,6 +552,47 @@
 
     function closeOverlay() { document.getElementById('overlay').classList.add('hidden'); }
 </script>
+
+<!-- 
+=== Supabase 設置說明 ===
+
+要啟用真正的雲端多設備同步，請按以下步驟：
+
+1. 訪問 https://supabase.com 並免費註冊
+2. 建立新的 Supabase 項目（選擇任意地區）
+3. 等待項目初始化完成
+4. 在 Supabase Dashboard 中：
+   - 左側菜單 → SQL Editor
+   - 新建一個 Query
+   - 複製並執行以下 SQL：
+
+---
+CREATE TABLE restaurant_data (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  rests JSONB,
+  picky JSONB,
+  timestamp TIMESTAMP DEFAULT NOW(),
+  device_info TEXT
+);
+
+-- 設置即時廣播權限
+ALTER PUBLICATION supabase_realtime ADD TABLE restaurant_data;
+---
+
+5. 回到 Settings → API 複製：
+   - Project URL (例如 https://xxxxx.supabase.co)
+   - Anon Public Key
+
+6. 編輯本文件，找到第 3-4 行，替換：
+   const SUPABASE_URL = "複製的 Project URL";
+   const SUPABASE_KEY = "複製的 Anon Public Key";
+
+7. 保存並重新載入網頁，應該看到「✓ 雲端已連接」
+
+祝你同步愉快！
+
+-->
 
 </body>
 </html>
