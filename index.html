@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saki 美食手帳 | Foodie.AI</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
     <style>
         /* CSS 視覺層 - 日系極簡美學 */
         @import url('https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Noto+Serif+TC:wght@500;700&display=swap');
@@ -61,6 +64,7 @@
         .modal { background: var(--bg-washi); width: 85%; max-width: 350px; padding: 30px; border-radius: 4px; text-align: center; }
         .spinner { border: 2px solid rgba(0,0,0,0.1); border-top: 2px solid var(--text-main); border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; margin: 0 auto 15px; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
+        .sync-status { font-size: 0.75rem; color: #888; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -68,7 +72,8 @@
 <div class="app-container">
     <nav>
         <div class="logo">Foodie.AI</div>
-        <div class="subtitle">Saki 美食資料庫 / GitHub Pages</div>
+        <div class="subtitle">Saki 美食資料庫 / 雲端同步版</div>
+        <div class="sync-status" id="sync-status">連接中...</div>
     </nav>
 
     <main>
@@ -149,10 +154,10 @@
         </section>
 
         <div class="sync-area">
-            <div style="font-size:0.8rem; font-weight:bold; color:#666;">🔄 設備同步 (電腦 ↔ 手機)</div>
+            <div style="font-size:0.8rem; font-weight:bold; color:#666;">🔄 設備同步 (自動雲端同步)</div>
             <div class="sync-btns">
-                <button onclick="exportData()">1. 複製備份代碼</button>
-                <button onclick="importData()">2. 匯入代碼</button>
+                <button onclick="exportData()">複製備份代碼</button>
+                <button onclick="importData()">匯入代碼</button>
             </div>
         </div>
     </main>
@@ -173,45 +178,77 @@
 </div>
 
 <script>
-    // --- 資料核心 ---
-    const DB_KEY = 'SAKI_STORAGE_V4';
-    const PICKY_KEY = 'SAKI_PICKY_V4';
+    // === 初始化 Firebase ===
+    const firebaseConfig = {
+        apiKey: "AIzaSyABCDEF1234567890ABCDEFGHIJKLMNOPqrs",
+        authDomain: "saki-foodie.firebaseapp.com",
+        databaseURL: "https://saki-foodie-default-rtdb.firebaseio.com",
+        projectId: "saki-foodie",
+        storageBucket: "saki-foodie.appspot.com",
+        messagingSenderId: "123456789012",
+        appId: "1:123456789012:web:abcdefgh1234567890ijkl"
+    };
 
-    let rests = JSON.parse(localStorage.getItem(DB_KEY)) || [];
-    let picky = JSON.parse(localStorage.getItem(PICKY_KEY)) || [];
+    let db = null;
+    let rests = [];
+    let picky = [];
     let currentTab = 'all';
 
-    document.addEventListener('DOMContentLoaded', () => { 
-        renderRests(); 
-        renderPicky();
-        startAutoSync();
-    });
+    // 初始化 Firebase
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
 
-    // 自動同步 - 每 2 秒檢查一次本地存儲，若有變化則更新
-    function startAutoSync() {
-        setInterval(() => {
-            const storedRests = localStorage.getItem(DB_KEY);
-            const storedPicky = localStorage.getItem(PICKY_KEY);
-            
-            if(storedRests) {
-                const newRests = JSON.parse(storedRests);
-                if(JSON.stringify(newRests) !== JSON.stringify(rests)) {
-                    rests = newRests;
-                    renderRests();
-                }
-            }
-            
-            if(storedPicky) {
-                const newPicky = JSON.parse(storedPicky);
-                if(JSON.stringify(newPicky) !== JSON.stringify(picky)) {
-                    picky = newPicky;
-                    renderPicky();
-                }
-            }
-        }, 2000);
+    // 生成用戶 ID（存儲在 localStorage）
+    let userId = localStorage.getItem('SAKI_USER_ID');
+    if (!userId) {
+        userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('SAKI_USER_ID', userId);
     }
 
-    // --- 分頁與篩選 ---
+    // 應用載入時連接 Firebase
+    document.addEventListener('DOMContentLoaded', () => {
+        connectToCloud();
+    });
+
+    // 連接到雲端並監聽實時更新
+    function connectToCloud() {
+        const restsRef = db.ref('data/' + userId + '/rests');
+        const pickyRef = db.ref('data/' + userId + '/picky');
+
+        // 監聽餐廳數據變化
+        restsRef.on('value', (snapshot) => {
+            if (snapshot.val()) {
+                rests = Object.values(snapshot.val());
+            } else {
+                rests = [];
+            }
+            renderRests();
+            updateSyncStatus(true);
+        });
+
+        // 監聽偏食數據變化
+        pickyRef.on('value', (snapshot) => {
+            if (snapshot.val()) {
+                picky = Object.values(snapshot.val());
+            } else {
+                picky = [];
+            }
+            renderPicky();
+        });
+    }
+
+    function updateSyncStatus(isConnected) {
+        const status = document.getElementById('sync-status');
+        if (isConnected) {
+            status.innerText = '✓ 雲端已同步';
+            status.style.color = '#7FB2BB';
+        } else {
+            status.innerText = '⚠ 離線模式';
+            status.style.color = '#d4622f';
+        }
+    }
+
+    // === 分頁與篩選 ===
     function setTab(tab, btn) {
         currentTab = tab;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -219,7 +256,7 @@
         renderRests();
     }
 
-    // --- 餐廳管理 (增刪改) ---
+    // === 餐廳管理 ===
     function saveRest() {
         const id = document.getElementById('edit-id').value;
         const name = document.getElementById('restName').value;
@@ -231,19 +268,16 @@
             map: document.getElementById('restMap').value,
             loc: document.getElementById('addLoc').value,
             style: document.getElementById('addStyle').value,
-            jane: document.getElementById('janeScore').value,
-            su: document.getElementById('suScore').value,
+            jane: parseInt(document.getElementById('janeScore').value),
+            su: parseInt(document.getElementById('suScore').value),
             note: document.getElementById('restNote').value
         };
 
-        if(id) {
-            const idx = rests.findIndex(r => r.id == id);
-            rests[idx] = newRest;
-        } else {
-            rests.push(newRest);
-        }
-        
-        saveAndRefresh();
+        // 上傳到 Firebase
+        const updates = {};
+        updates['data/' + userId + '/rests/' + newRest.id] = newRest;
+        db.ref().update(updates);
+
         toggleForm();
     }
 
@@ -256,8 +290,8 @@
             const matchLoc = (locF === 'all' || r.loc === locF);
             const matchStyle = (styleF === 'all' || r.style === styleF);
             let matchTab = true;
-            if(currentTab === 'wish') matchTab = (parseInt(r.jane) === 0);
-            if(currentTab === 'high') matchTab = (parseInt(r.jane) >= 4);
+            if(currentTab === 'wish') matchTab = (r.jane === 0);
+            if(currentTab === 'high') matchTab = (r.jane >= 4);
             return matchLoc && matchStyle && matchTab;
         });
 
@@ -292,19 +326,19 @@
 
     function deleteRest(id) {
         if(confirm('確定要刪除這間餐廳嗎？')) {
-            rests = rests.filter(r => r.id !== id);
-            saveAndRefresh();
+            db.ref('data/' + userId + '/rests/' + id).remove();
         }
     }
 
-    // --- 偏食區管理 ---
+    // === 偏食區管理 ===
     function addPicky() {
         const val = document.getElementById('picky-input').value.trim();
         if(val) {
-            picky.push(val);
-            localStorage.setItem(PICKY_KEY, JSON.stringify(picky));
+            const id = Date.now();
+            const updates = {};
+            updates['data/' + userId + '/picky/' + id] = val;
+            db.ref().update(updates);
             document.getElementById('picky-input').value = '';
-            renderPicky();
         }
     }
 
@@ -317,16 +351,25 @@
     function editPicky(i) {
         const n = prompt('修改內容 (留空則刪除)：', picky[i]);
         if(n === null) return;
-        if(n.trim() === "") picky.splice(i, 1); else picky[i] = n;
-        localStorage.setItem(PICKY_KEY, JSON.stringify(picky));
-        renderPicky();
+        if(n.trim() === "") {
+            // 找到對應的 Firebase key 並刪除
+            const keys = Object.keys(picky);
+            if(i < keys.length) {
+                db.ref('data/' + userId + '/picky/' + keys[i]).remove();
+            }
+        } else {
+            const keys = Object.keys(picky);
+            if(i < keys.length) {
+                db.ref('data/' + userId + '/picky/' + keys[i]).set(n);
+            }
+        }
     }
 
-    // --- 同步搬家 ---
+    // === 同步搬家 ===
     function exportData() {
         const str = JSON.stringify({ r: rests, p: picky });
         navigator.clipboard.writeText(str).then(() => {
-            alert('✅ 代碼已複製！請傳到 LINE，再到手機上按「匯入代碼」。');
+            alert('✅ 代碼已複製！可傳到 LINE 備份。');
         }).catch(() => {
             prompt("請複製以下文字：", str);
         });
@@ -337,17 +380,20 @@
         if(!str) return;
         try {
             const data = JSON.parse(str);
-            if(data.r) {
+            if(data.r && Array.isArray(data.r)) {
                 if(confirm('匯入將覆蓋現有資料，確定嗎？')) {
-                    rests = data.r; picky = data.p || [];
-                    saveAndRefresh();
-                    location.reload();
+                    data.r.forEach(r => {
+                        const updates = {};
+                        updates['data/' + userId + '/rests/' + r.id] = r;
+                        db.ref().update(updates);
+                    });
+                    alert('✅ 匯入成功！');
                 }
             }
         } catch(e) { alert('格式不正確！'); }
     }
 
-    // --- UI 控制 ---
+    // === UI 控制 ===
     function toggleForm(forceOpen) {
         const f = document.getElementById('add-form');
         if(forceOpen) f.classList.remove('hidden');
@@ -360,11 +406,8 @@
         document.getElementById('restName').value = '';
         document.getElementById('restMap').value = '';
         document.getElementById('restNote').value = '';
-    }
-
-    function saveAndRefresh() {
-        localStorage.setItem(DB_KEY, JSON.stringify(rests));
-        renderRests();
+        document.getElementById('janeScore').value = 5;
+        document.getElementById('suScore').value = 5;
     }
 
     function startGeminiSearch() {
@@ -373,7 +416,6 @@
         document.getElementById('ai-result-content').classList.add('hidden');
         
         setTimeout(() => {
-            // 過濾掉包含偏食標籤的餐廳
             const pool = rests.filter(r => !picky.some(p => r.name.includes(p)));
             const winner = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : rests[Math.floor(Math.random() * rests.length)];
             
