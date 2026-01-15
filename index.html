@@ -75,6 +75,10 @@
         <div class="logo">Foodie.AI</div>
         <div class="subtitle">Saki 美食資料庫 / 雲端同步版</div>
         <div class="sync-status" id="sync-status">連接中...</div>
+        <button id="debug-btn" onclick="toggleDebug()" style="position:fixed; top:10px; right:10px; background:#ddd; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-size:0.7rem; z-index:999;">🔍 診斷</button>
+        <div id="debug-log" style="position:fixed; bottom:0; right:0; width:350px; height:300px; background:#000; color:#0f0; font-family:monospace; font-size:0.65rem; overflow-y:auto; padding:10px; border:1px solid #0f0; display:none; z-index:1000; box-shadow:0 0 10px rgba(0,0,0,0.8); border-radius:4px 4px 0 0; margin:10px;">
+            <div id="debug-content"></div>
+        </div>
     </nav>
 
     <main>
@@ -179,6 +183,22 @@
 </div>
 
 <script>
+    let debugLogs = [];
+    
+    function addDebugLog(msg) {
+        debugLogs.push('[' + new Date().toLocaleTimeString('zh-TW') + '] ' + msg);
+        const content = document.getElementById('debug-content');
+        if(content) {
+            content.innerHTML = debugLogs.map(l => '<div>' + l + '</div>').join('');
+            content.parentElement.scrollTop = content.parentElement.scrollHeight;
+        }
+    }
+    
+    function toggleDebug() {
+        const debug = document.getElementById('debug-log');
+        debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
+    }
+    
     // ============================================================================
     // Saki 美食手帳 - Foodie.AI v2.0 (Supabase 實時雲端同步版)
     // ============================================================================
@@ -207,11 +227,14 @@
     async function initSupabase() {
         try {
             console.log('📡 检查 Supabase 配置...');
+            addDebugLog('📡 检查 Supabase 配置...');
             
             // 检查配置有效性
             if (!SUPABASE_URL || !SUPABASE_KEY || !SUPABASE_URL.includes('supabase.co')) {
                 throw new Error('Supabase 配置无效');
             }
+            
+            addDebugLog('✅ 配置有效');
             
             // 检查 SDK 是否加载
             if (!window.supabase) {
@@ -219,11 +242,13 @@
             }
             
             console.log('✅ SDK 已加载，初始化客户端...');
+            addDebugLog('✅ SDK 已加载，初始化客户端...');
             
             // 初始化 Supabase 客户端
             supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
             
             console.log('✅ 客户端初始化完成');
+            addDebugLog('✅ 客户端初始化完成');
             
             // 生成装置 ID
             userId = localStorage.getItem('SAKI_USER_ID');
@@ -235,23 +260,28 @@
             
             // 载入本地数据
             console.log('💾 载入本地数据...');
+            addDebugLog('💾 载入本地数据...');
             loadLocalData();
             renderRests();
             renderPicky();
             
             // 同步云端数据
             console.log('☁️ 同步云端数据...');
+            addDebugLog('☁️ 同步云端数据...');
             await syncFromSupabase();
             
             // 设置定期轮询（不使用不稳定的实时订阅）
             console.log('🔄 启动定期轮询（每 10 秒检查一次）...');
+            addDebugLog('🔄 启动定期轮询（每 10 秒检查一次）...');
             setInterval(syncFromSupabase, 10000);
             
             isInitialized = true;
             updateSyncStatus('connected');
+            addDebugLog('✅ Supabase 初始化成功！');
             console.log('✅ Supabase 初始化成功！');
             
         } catch(e) {
+            addDebugLog('❌ 错误: ' + e.message);
             console.error('❌ Supabase 初始化失败:', e.message);
             console.error('详细信息:', e);
             
@@ -261,6 +291,7 @@
             renderPicky();
             updateSyncStatus('offline');
             isInitialized = true;
+            addDebugLog('💾 已切换到本地数据模式');
             console.log('💾 已切换到本地数据模式');
         }
     }
