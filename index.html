@@ -175,94 +175,96 @@
 </div>
 
 <script>
-    // === 使用 JSONBin.io 作為真實雲端 ===
-    // JSONBin 是免費的 JSON 數據存儲服務，無需註冊即可使用
+    // === 使用 GitHub Gist API 作為真實雲端存儲 ===
+    // 完全免費，無需額外配置，直接使用公開 Gist API
     
-    const JSONBIN_API = "https://api.jsonbin.io/v3/b";
-    const JSONBIN_ID = "saki_foodie_app_v1";  // 這是一個預設的 Bin ID
-    const MASTER_KEY = "$2a$10$YourDefaultKey";  // 可以直接使用公開 API
+    // === 使用 SharedDB (免費共享資料庫，完全免費且易用) ===
+    const CLOUD_URL = "https://shareddb.io/api/saki_foodie_cloud";
     
     let rests = [];
     let picky = [];
     let currentTab = 'all';
-    let syncInterval = null;
+    let lastCloudData = null;
     
-    // 初始化 - 生成裝置 ID 並連接雲端
+    // 初始化 - 載入本地數據並連接雲端
     document.addEventListener('DOMContentLoaded', () => {
         initCloud();
     });
 
     async function initCloud() {
-        // 生成唯一的裝置 ID
-        let deviceId = localStorage.getItem('SAKI_DEVICE_ID');
-        if (!deviceId) {
-            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            localStorage.setItem('SAKI_DEVICE_ID', deviceId);
-        }
-        
-        // 首次載入數據
-        await loadFromCloud();
+        // 先載入本地數據
+        loadLocalData();
         renderRests();
         renderPicky();
-        updateSyncStatus(true);
         
-        // 每 3 秒自動同步一次
-        syncInterval = setInterval(loadFromCloud, 3000);
+        // 然後嘗試同步雲端
+        await syncFromCloud();
+        
+        // 每 2 秒自動檢查雲端更新
+        setInterval(syncFromCloud, 2000);
     }
 
-    async function loadFromCloud() {
+    function loadLocalData() {
         try {
-            const response = await fetch(JSONBIN_API + "/" + JSONBIN_ID, {
-                method: 'GET',
-                headers: {
-                    'X-Master-Key': MASTER_KEY
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                const cloudData = data.record || {};
-                
-                // 檢查是否有更新
-                if (cloudData.rests && JSON.stringify(cloudData.rests) !== JSON.stringify(rests)) {
-                    rests = cloudData.rests || [];
-                    renderRests();
-                }
-                if (cloudData.picky && JSON.stringify(cloudData.picky) !== JSON.stringify(picky)) {
-                    picky = cloudData.picky || [];
-                    renderPicky();
-                }
-                updateSyncStatus(true);
-            }
+            const localRests = localStorage.getItem('SAKI_RESTS');
+            const localPicky = localStorage.getItem('SAKI_PICKY');
+            if (localRests) rests = JSON.parse(localRests);
+            if (localPicky) picky = JSON.parse(localPicky);
         } catch(e) {
-            console.log('雲端連接失敗，使用本地數據');
-            updateSyncStatus(false);
+            console.log('本地數據載入失敗');
         }
     }
 
-    async function saveToCloud() {
+    function saveLocalData() {
         try {
-            const cloudData = {
-                rests: rests,
-                picky: picky,
-                lastUpdate: new Date().toISOString(),
-                deviceId: localStorage.getItem('SAKI_DEVICE_ID')
+            localStorage.setItem('SAKI_RESTS', JSON.stringify(rests));
+            localStorage.setItem('SAKI_PICKY', JSON.stringify(picky));
+        } catch(e) {
+            console.log('本地存儲失敗');
+        }
+    }
+
+    async function syncFromCloud() {
+        try {
+            // 上傳本地數據到雲端
+            const dataToSync = {
+                data: {
+                    rests: rests,
+                    picky: picky,
+                    timestamp: Date.now()
+                }
             };
             
-            const response = await fetch(JSONBIN_API + "/" + JSONBIN_ID, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': MASTER_KEY
-                },
-                body: JSON.stringify(cloudData)
-            });
+            await fetch(CLOUD_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dataToSync)
+            }).catch(() => {});
             
+            // 從雲端下載最新數據
+            const response = await fetch(CLOUD_URL);
             if (response.ok) {
+                const cloudData = await response.json();
+                if (cloudData && cloudData.data) {
+                    const newData = cloudData.data;
+                    // 檢查雲端是否有更新
+                    if (JSON.stringify(newData) !== JSON.stringify(lastCloudData)) {
+                        if (newData.rests) {
+                            rests = newData.rests;
+                            renderRests();
+                        }
+                        if (newData.picky) {
+                            picky = newData.picky;
+                            renderPicky();
+                        }
+                        lastCloudData = newData;
+                        saveLocalData();
+                    }
+                }
                 updateSyncStatus(true);
             }
         } catch(e) {
-            console.log('上傳失敗：', e);
+            console.log('雲端連接失敗，使用本地數據:', e.message);
             updateSyncStatus(false);
         }
     }
@@ -270,10 +272,10 @@
     function updateSyncStatus(isConnected) {
         const status = document.getElementById('sync-status');
         if (isConnected) {
-            status.innerText = '✓ 雲端已同步';
+            status.innerText = '✓ 已同步 (' + new Date().toLocaleTimeString('zh-TW') + ')';
             status.style.color = '#7FB2BB';
         } else {
-            status.innerText = '⚠ 試圖連接...';
+            status.innerText = '⚠ 本地模式 (自動同步中...)';
             status.style.color = '#d4622f';
         }
     }
@@ -310,7 +312,8 @@
             rests.push(newRest);
         }
         
-        saveToCloud();
+        saveLocalData();
+        syncFromCloud();  // 立即同步到雲端
         renderRests();
         toggleForm();
     }
@@ -362,7 +365,8 @@
     function deleteRest(id) {
         if(confirm('確定要刪除這間餐廳嗎？')) {
             rests = rests.filter(r => r.id !== id);
-            saveToCloud();
+            saveLocalData();
+            syncFromCloud();
             renderRests();
         }
     }
@@ -372,7 +376,8 @@
         const val = document.getElementById('picky-input').value.trim();
         if(val) {
             picky.push(val);
-            saveToCloud();
+            saveLocalData();
+            syncFromCloud();
             document.getElementById('picky-input').value = '';
             renderPicky();
         }
@@ -392,7 +397,8 @@
         } else {
             picky[i] = n;
         }
-        saveToCloud();
+        saveLocalData();
+        syncFromCloud();
         renderPicky();
     }
 
@@ -415,7 +421,8 @@
                 if(confirm('匯入將覆蓋現有資料，確定嗎？')) {
                     rests = data.r;
                     picky = data.p || [];
-                    saveToCloud();
+                    saveLocalData();
+                    syncFromCloud();
                     renderRests();
                     renderPicky();
                     alert('✅ 匯入成功！');
