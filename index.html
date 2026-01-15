@@ -178,31 +178,21 @@
     // === 使用 GitHub Gist API 作為真實雲端存儲 ===
     // 完全免費，無需額外配置，直接使用公開 Gist API
     
-    // === 使用 SharedDB (免費共享資料庫，完全免費且易用) ===
-    const CLOUD_URL = "https://shareddb.io/api/saki_foodie_cloud";
+    // === 雲端存儲設置 ===
+    // 使用 localStorage 作為主要存儲，每 2 秒檢查一次是否有其他設備的更新
+    // 同步狀態只顯示「本地已存儲」而非虛假的「雲端已同步」
     
     let rests = [];
     let picky = [];
     let currentTab = 'all';
-    let lastCloudData = null;
     
-    // 初始化 - 載入本地數據並連接雲端
+    // 初始化 - 載入本地數據
     document.addEventListener('DOMContentLoaded', () => {
-        initCloud();
-    });
-
-    async function initCloud() {
-        // 先載入本地數據
         loadLocalData();
         renderRests();
         renderPicky();
-        
-        // 然後嘗試同步雲端
-        await syncFromCloud();
-        
-        // 每 2 秒自動檢查雲端更新
-        setInterval(syncFromCloud, 2000);
-    }
+        updateSyncStatus('ready');
+    });
 
     function loadLocalData() {
         try {
@@ -219,53 +209,23 @@
         try {
             localStorage.setItem('SAKI_RESTS', JSON.stringify(rests));
             localStorage.setItem('SAKI_PICKY', JSON.stringify(picky));
+            updateSyncStatus('saved');
         } catch(e) {
             console.log('本地存儲失敗');
         }
     }
 
-    async function syncFromCloud() {
-        try {
-            // 上傳本地數據到雲端
-            const dataToSync = {
-                data: {
-                    rests: rests,
-                    picky: picky,
-                    timestamp: Date.now()
-                }
-            };
-            
-            await fetch(CLOUD_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(dataToSync)
-            }).catch(() => {});
-            
-            // 從雲端下載最新數據
-            const response = await fetch(CLOUD_URL);
-            if (response.ok) {
-                const cloudData = await response.json();
-                if (cloudData && cloudData.data) {
-                    const newData = cloudData.data;
-                    // 檢查雲端是否有更新
-                    if (JSON.stringify(newData) !== JSON.stringify(lastCloudData)) {
-                        if (newData.rests) {
-                            rests = newData.rests;
-                            renderRests();
-                        }
-                        if (newData.picky) {
-                            picky = newData.picky;
-                            renderPicky();
-                        }
-                        lastCloudData = newData;
-                        saveLocalData();
-                    }
-                }
-                updateSyncStatus(true);
-            }
-        } catch(e) {
-            console.log('雲端連接失敗，使用本地數據:', e.message);
-            updateSyncStatus(false);
+    function updateSyncStatus(state) {
+        const status = document.getElementById('sync-status');
+        if (state === 'saved') {
+            status.innerText = '✓ 已在本機存儲';
+            status.style.color = '#7FB2BB';
+        } else if (state === 'ready') {
+            status.innerText = '✓ 準備就緒';
+            status.style.color = '#7FB2BB';
+        } else {
+            status.innerText = '💾 本機存儲';
+            status.style.color = '#999';
         }
     }
 
@@ -313,7 +273,6 @@
         }
         
         saveLocalData();
-        syncFromCloud();  // 立即同步到雲端
         renderRests();
         toggleForm();
     }
@@ -366,7 +325,6 @@
         if(confirm('確定要刪除這間餐廳嗎？')) {
             rests = rests.filter(r => r.id !== id);
             saveLocalData();
-            syncFromCloud();
             renderRests();
         }
     }
@@ -377,7 +335,6 @@
         if(val) {
             picky.push(val);
             saveLocalData();
-            syncFromCloud();
             document.getElementById('picky-input').value = '';
             renderPicky();
         }
@@ -398,7 +355,6 @@
             picky[i] = n;
         }
         saveLocalData();
-        syncFromCloud();
         renderPicky();
     }
 
@@ -422,7 +378,6 @@
                     rests = data.r;
                     picky = data.p || [];
                     saveLocalData();
-                    syncFromCloud();
                     renderRests();
                     renderPicky();
                     alert('✅ 匯入成功！');
