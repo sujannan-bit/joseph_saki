@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saki 美食手帳 | Foodie.AI</title>
+    <style>
+        /* CSS 視覺層 - 日系極簡美學 */
+        @import url('https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Noto+Serif+TC:wght@500;700&display=swap');
+
+        :root {
+            --bg-washi: #FDFCF8;
+            --text-main: #4A3F35;
+            --accent-blue: #7FB2BB;
+            --border-color: #E6E2D8;
+        }
+
+        body { background: #F0F0F0; font-family: 'Noto Serif TC', serif; color: var(--text-main); margin: 0; }
+        .app-container { width: 100%; max-width: 420px; margin: 0 auto; background: var(--bg-washi); min-height: 100vh; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
+
+        nav { padding: 30px 20px 20px; border-bottom: 1px solid var(--border-color); text-align: center; }
+        .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: 2px; }
+        .subtitle { font-family: 'Klee One', cursive; font-size: 0.8rem; color: #999; margin-top: 5px; }
+
+        .section-card { padding: 25px 20px; border-bottom: 1px solid var(--border-color); }
+        .label { font-size: 0.85rem; font-weight: 700; margin-bottom: 15px; border-left: 3px solid var(--text-main); padding-left: 10px; }
+
+        /* 分頁 Tabs */
+        .tab-group { display: flex; gap: 15px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); }
+        .tab-btn { background: none; border: none; padding: 8px 5px; font-family: inherit; color: #ccc; cursor: pointer; }
+        .tab-btn.active { color: var(--text-main); font-weight: 700; border-bottom: 2px solid var(--text-main); }
+
+        /* 輸入與表單 */
+        .filter-row { display: flex; gap: 8px; margin-bottom: 15px; }
+        select, .input-field { width: 100%; padding: 12px; border: 1px solid var(--border-color); background: #fff; outline: none; font-family: inherit; box-sizing: border-box; }
+        .input-row-flex { display: flex; gap: 8px; margin-bottom: 10px; }
+        .rating-row { display: flex; justify-content: space-between; margin: 10px 0; font-size: 0.85rem; }
+        .rating-row input { width: 45px; }
+        .note-textarea { height: 70px; resize: none; margin-top: 5px; font-family: 'Klee One', cursive; }
+
+        .btn-save { width: 100%; padding: 12px; background: var(--text-main); color: #fff; border: none; cursor: pointer; border-radius: 4px; }
+        .btn-cancel { width: 100%; background: none; border: none; color: #aaa; margin-top: 8px; cursor: pointer; font-size: 0.8rem; }
+
+        /* 列表樣式 */
+        .rest-item { padding: 15px 0; border-bottom: 1px dotted var(--border-color); display: flex; justify-content: space-between; align-items: flex-start; }
+        .rest-info h4 { margin: 0 0 5px; font-size: 1rem; }
+        .rest-info p { margin: 0; font-size: 0.75rem; color: #888; }
+        .item-note { font-family: 'Klee One', cursive; color: #666; font-size: 0.8rem; margin-top: 8px !important; }
+
+        /* 偏食標籤 */
+        .picky-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .picky-tag { background: #eee; padding: 5px 12px; border-radius: 20px; font-size: 0.8rem; font-family: 'Klee One', cursive; cursor: pointer; }
+
+        /* 搬家區 */
+        .sync-area { background: #f9f9f9; border: 1px dashed #ddd; margin: 20px; padding: 15px; text-align: center; }
+        .sync-btns { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        .sync-btns button { font-size: 0.75rem; padding: 8px; cursor: pointer; border: 1px solid #ccc; background: #fff; }
+
+        .hidden { display: none !important; }
+        #overlay { position: fixed; inset: 0; background: rgba(74, 63, 53, 0.9); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .modal { background: var(--bg-washi); width: 85%; max-width: 350px; padding: 30px; border-radius: 4px; text-align: center; }
+        .spinner { border: 2px solid rgba(0,0,0,0.1); border-top: 2px solid var(--text-main); border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; margin: 0 auto 15px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <nav>
+        <div class="logo">Foodie.AI</div>
+        <div class="subtitle">Saki 美食資料庫 / GitHub Pages</div>
+    </nav>
+
+    <main>
+        <section class="section-card">
+            <div class="label">✨ Gemini 智慧搜尋 / AI 検索</div>
+            <div class="filter-row">
+                <input type="text" id="ai-command" placeholder="想吃點什麼？" class="input-field" style="flex:1">
+                <button onclick="startGeminiSearch()" style="padding:0 15px; background:var(--text-main); color:white; border:none; border-radius:4px; cursor:pointer;">Ask</button>
+            </div>
+        </section>
+
+        <section class="section-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <div class="label" style="margin:0">📦 餐廳清單 / リスト</div>
+                <button onclick="toggleForm()" style="background:none; border:1px solid #ddd; padding:5px 10px; cursor:pointer; color:#888; border-radius:4px;">＋ 新增</button>
+            </div>
+
+            <div class="tab-group">
+                <button class="tab-btn active" onclick="setTab('all', this)">全部</button>
+                <button class="tab-btn" onclick="setTab('wish', this)">想去清單</button>
+                <button class="tab-btn" onclick="setTab('high', this)">高分 (4★+)</button>
+            </div>
+
+            <div class="filter-row">
+                <select id="loc-filter" onchange="renderRests()">
+                    <option value="all">所有區域</option>
+                    <option value="嘉義市">嘉義市</option>
+                    <option value="民雄鄉">民雄鄉</option>
+                    <option value="中正大學附近">中正大學附近</option>
+                </select>
+                <select id="style-filter" onchange="renderRests()">
+                    <option value="all">所有類別</option>
+                    <option value="中式">中式</option>
+                    <option value="日式">日式</option>
+                    <option value="韓式">韓式</option>
+                    <option value="西式">西式</option>
+                    <option value="甜點/飲料">甜點/飲料</option>
+                </select>
+            </div>
+
+            <div id="add-form" class="hidden" style="background:#fff; padding:15px; border:1px solid var(--border-color); margin-bottom:20px; border-radius:4px;">
+                <input type="hidden" id="edit-id">
+                <input type="text" id="restName" placeholder="店名" class="input-field" style="margin-bottom:10px;">
+                <input type="text" id="restMap" placeholder="Google Map 連結" class="input-field" style="margin-bottom:10px;">
+                <div class="input-row-flex">
+                    <select id="addLoc" class="input-field">
+                        <option value="嘉義市">嘉義市</option>
+                        <option value="民雄鄉">民雄鄉</option>
+                        <option value="中正大學附近">中正大學附近</option>
+                    </select>
+                    <select id="addStyle" class="input-field">
+                        <option value="中式">中式</option>
+                        <option value="日式">日式</option>
+                        <option value="韓式">韓式</option>
+                        <option value="西式">西式</option>
+                        <option value="甜點/飲料">甜點/飲料</option>
+                    </select>
+                </div>
+                <div class="rating-row">
+                    <span>🐰 咪: <input type="number" id="janeScore" min="0" max="5" value="5"></span>
+                    <span>🧔 蘇: <input type="number" id="suScore" min="0" max="5" value="5"></span>
+                </div>
+                <textarea id="restNote" placeholder="必點菜色或心得..." class="input-field note-textarea"></textarea>
+                <button class="btn-save" onclick="saveRest()">🔒 鎖定存入 / 保存</button>
+                <button class="btn-cancel" onclick="toggleForm()">取消</button>
+            </div>
+
+            <div id="rest-list"></div>
+        </section>
+
+        <section class="section-card">
+            <div class="label">✎ Saki 偏食手帳 (點擊可編輯)</div>
+            <div class="filter-row">
+                <input type="text" id="picky-input" placeholder="我不吃..." class="input-field" style="flex:1">
+                <button onclick="addPicky()" style="padding:0 15px; background:none; border:1px solid #ddd; cursor:pointer; border-radius:4px;">紀錄</button>
+            </div>
+            <div id="picky-tags" class="picky-tags"></div>
+        </section>
+
+        <div class="sync-area">
+            <div style="font-size:0.8rem; font-weight:bold; color:#666;">🔄 設備同步 (電腦 ↔ 手機)</div>
+            <div class="sync-btns">
+                <button onclick="exportData()">1. 複製備份代碼</button>
+                <button onclick="importData()">2. 匯入代碼</button>
+            </div>
+        </div>
+    </main>
+
+    <div id="overlay" class="hidden" onclick="closeOverlay()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div id="ai-loading"><div class="spinner"></div><p>Gemini 分析中...</p></div>
+            <div id="ai-result-content" class="hidden">
+                <h2 id="res-name"></h2>
+                <div id="res-info" style="margin:10px 0; font-size:0.9rem; color:#888;"></div>
+                <div id="res-score" style="margin:10px 0; color:var(--accent-blue); font-weight:bold;"></div>
+                <p id="res-note" style="font-family:'Klee One'; color:#666; font-size:0.9rem;"></p>
+                <a id="res-map" href="#" target="_blank" style="display:block; margin:20px 0; padding:12px; background:var(--accent-blue); color:white; text-decoration:none; border-radius:4px; font-weight:bold;">📍 開啟地圖導航</a>
+                <button onclick="closeOverlay()" style="border:none; background:none; color:#999; cursor:pointer; font-size:0.8rem;">關閉 / Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 資料核心 ---
+    const DB_KEY = 'SAKI_STORAGE_V4';
+    const PICKY_KEY = 'SAKI_PICKY_V4';
+
+    let rests = JSON.parse(localStorage.getItem(DB_KEY)) || [];
+    let picky = JSON.parse(localStorage.getItem(PICKY_KEY)) || [];
+    let currentTab = 'all';
+
+    document.addEventListener('DOMContentLoaded', () => { renderRests(); renderPicky(); });
+
+    // --- 分頁與篩選 ---
+    function setTab(tab, btn) {
+        currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderRests();
+    }
+
+    // --- 餐廳管理 (增刪改) ---
+    function saveRest() {
+        const id = document.getElementById('edit-id').value;
+        const name = document.getElementById('restName').value;
+        if(!name) return alert('店名是必填的喔！');
+
+        const newRest = {
+            id: id ? parseInt(id) : Date.now(),
+            name: name,
+            map: document.getElementById('restMap').value,
+            loc: document.getElementById('addLoc').value,
+            style: document.getElementById('addStyle').value,
+            jane: document.getElementById('janeScore').value,
+            su: document.getElementById('suScore').value,
+            note: document.getElementById('restNote').value
+        };
+
+        if(id) {
+            const idx = rests.findIndex(r => r.id == id);
+            rests[idx] = newRest;
+        } else {
+            rests.push(newRest);
+        }
+        
+        saveAndRefresh();
+        toggleForm();
+    }
+
+    function renderRests() {
+        const locF = document.getElementById('loc-filter').value;
+        const styleF = document.getElementById('style-filter').value;
+        const container = document.getElementById('rest-list');
+
+        let filtered = rests.filter(r => {
+            const matchLoc = (locF === 'all' || r.loc === locF);
+            const matchStyle = (styleF === 'all' || r.style === styleF);
+            let matchTab = true;
+            if(currentTab === 'wish') matchTab = (parseInt(r.jane) === 0);
+            if(currentTab === 'high') matchTab = (parseInt(r.jane) >= 4);
+            return matchLoc && matchStyle && matchTab;
+        });
+
+        container.innerHTML = filtered.map(r => `
+            <div class="rest-item">
+                <div class="rest-info">
+                    <h4>${r.name} <small style="color:#ccc; font-weight:normal;">[${r.style}]</small></h4>
+                    <p>🐰 ${r.jane} | 🧔 ${r.su || '?'} | ${r.loc}</p>
+                    ${r.note ? `<p class="item-note">📝 ${r.note}</p>` : ''}
+                </div>
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <button onclick="editRest(${r.id})" style="border:none; background:none; cursor:pointer; color:#ccc; font-size:1rem;">✎</button>
+                    <button onclick="deleteRest(${r.id})" style="border:none; background:none; cursor:pointer; color:#eee; font-size:1rem;">✕</button>
+                </div>
+            </div>
+        `).reverse().join('');
+    }
+
+    function editRest(id) {
+        const r = rests.find(i => i.id == id);
+        toggleForm(true);
+        document.getElementById('edit-id').value = r.id;
+        document.getElementById('restName').value = r.name;
+        document.getElementById('restMap').value = r.map;
+        document.getElementById('addLoc').value = r.loc;
+        document.getElementById('addStyle').value = r.style;
+        document.getElementById('janeScore').value = r.jane;
+        document.getElementById('suScore').value = r.su;
+        document.getElementById('restNote').value = r.note;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteRest(id) {
+        if(confirm('確定要刪除這間餐廳嗎？')) {
+            rests = rests.filter(r => r.id !== id);
+            saveAndRefresh();
+        }
+    }
+
+    // --- 偏食區管理 ---
+    function addPicky() {
+        const val = document.getElementById('picky-input').value.trim();
+        if(val) {
+            picky.push(val);
+            localStorage.setItem(PICKY_KEY, JSON.stringify(picky));
+            document.getElementById('picky-input').value = '';
+            renderPicky();
+        }
+    }
+
+    function renderPicky() {
+        document.getElementById('picky-tags').innerHTML = picky.map((p, i) => 
+            `<span class="picky-tag" onclick="editPicky(${i})">${p}</span>`
+        ).join('');
+    }
+
+    function editPicky(i) {
+        const n = prompt('修改內容 (留空則刪除)：', picky[i]);
+        if(n === null) return;
+        if(n.trim() === "") picky.splice(i, 1); else picky[i] = n;
+        localStorage.setItem(PICKY_KEY, JSON.stringify(picky));
+        renderPicky();
+    }
+
+    // --- 同步搬家 ---
+    function exportData() {
+        const str = JSON.stringify({ r: rests, p: picky });
+        navigator.clipboard.writeText(str).then(() => {
+            alert('✅ 代碼已複製！請傳到 LINE，再到手機上按「匯入代碼」。');
+        }).catch(() => {
+            prompt("請複製以下文字：", str);
+        });
+    }
+
+    function importData() {
+        const str = prompt('請貼入備份代碼：');
+        if(!str) return;
+        try {
+            const data = JSON.parse(str);
+            if(data.r) {
+                if(confirm('匯入將覆蓋現有資料，確定嗎？')) {
+                    rests = data.r; picky = data.p || [];
+                    saveAndRefresh();
+                    location.reload();
+                }
+            }
+        } catch(e) { alert('格式不正確！'); }
+    }
+
+    // --- UI 控制 ---
+    function toggleForm(forceOpen) {
+        const f = document.getElementById('add-form');
+        if(forceOpen) f.classList.remove('hidden');
+        else f.classList.toggle('hidden');
+        if(f.classList.contains('hidden')) resetForm();
+    }
+
+    function resetForm() {
+        document.getElementById('edit-id').value = '';
+        document.getElementById('restName').value = '';
+        document.getElementById('restMap').value = '';
+        document.getElementById('restNote').value = '';
+    }
+
+    function saveAndRefresh() {
+        localStorage.setItem(DB_KEY, JSON.stringify(rests));
+        renderRests();
+    }
+
+    function startGeminiSearch() {
+        document.getElementById('overlay').classList.remove('hidden');
+        document.getElementById('ai-loading').classList.remove('hidden');
+        document.getElementById('ai-result-content').classList.add('hidden');
+        
+        setTimeout(() => {
+            // 過濾掉包含偏食標籤的餐廳
+            const pool = rests.filter(r => !picky.some(p => r.name.includes(p)));
+            const winner = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : rests[Math.floor(Math.random() * rests.length)];
+            
+            document.getElementById('ai-loading').classList.add('hidden');
+            document.getElementById('ai-result-content').classList.remove('hidden');
+            
+            if(winner) {
+                document.getElementById('res-name').innerText = winner.name;
+                document.getElementById('res-info').innerText = `${winner.loc} · ${winner.style}`;
+                document.getElementById('res-score').innerText = `🐰 咪: ${winner.jane} | 🧔 蘇: ${winner.su}`;
+                document.getElementById('res-note').innerText = winner.note || "這間還沒寫筆記喔！";
+                document.getElementById('res-map').href = winner.map || `https://www.google.com/maps/search/${encodeURIComponent(winner.name)}`;
+            } else {
+                document.getElementById('res-name').innerText = "名單空空如也~";
+            }
+        }, 1200);
+    }
+
+    function closeOverlay() { document.getElementById('overlay').classList.add('hidden'); }
+</script>
+
+</body>
+</html>
