@@ -183,7 +183,17 @@
 </div>
 
 <script>
+    // ⚙️ Supabase 配置（全局作用域）
+    window.SUPABASE_URL = "複製的 Project URL";
+    window.SUPABASE_KEY = "複製的 Anon Public Key";
+</script>
+
+<script>
     // 🔧 全局變量
+    // 向後兼容：有些部署可能直接使用 `SUPABASE_URL` / `SUPABASE_KEY`
+    // 因此在全局 scope 同時設置變數和 window 屬性
+    var SUPABASE_URL = window.SUPABASE_URL || '';
+    var SUPABASE_KEY = window.SUPABASE_KEY || '';
     var rests = [];
     var picky = [];
     var currentTab = 'all';
@@ -229,7 +239,7 @@
             addDebugLog('📡 检查 Supabase 配置...');
             
             // 检查配置有效性
-            if (!SUPABASE_URL || !SUPABASE_KEY || !SUPABASE_URL.includes('supabase.co')) {
+            if (!window.SUPABASE_URL || !window.SUPABASE_KEY || !window.SUPABASE_URL.includes('supabase.co')) {
                 throw new Error('Supabase 配置无效');
             }
             
@@ -244,7 +254,7 @@
             addDebugLog('✅ SDK 已加载，初始化客户端...');
             
             // 初始化 Supabase 客户端
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
             
             console.log('✅ 客户端初始化完成');
             addDebugLog('✅ 客户端初始化完成');
@@ -667,9 +677,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE restaurant_data;
    - Project URL (例如 https://xxxxx.supabase.co)
    - Anon Public Key
 
-6. 編輯本文件，找到第 3-4 行，替換：
-   const SUPABASE_URL = "複製的 Project URL";
-   const SUPABASE_KEY = "複製的 Anon Public Key";
+6. 編輯本文件，找到第 187-188 行，替換：
+   var SUPABASE_URL = "你的 Project URL";
+   var SUPABASE_KEY = "你的 Anon Public Key";
 
 7. 保存並重新載入網頁，應該看到「✓ 雲端已連接」
 
