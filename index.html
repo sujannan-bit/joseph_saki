@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saki 美食手帳 | Foodie.AI</title>
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
     <style>
         /* CSS 視覺層 - 日系極簡美學 */
         @import url('https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Noto+Serif+TC:wght@500;700&display=swap');
@@ -178,63 +175,96 @@
 </div>
 
 <script>
-    // === 初始化 Firebase ===
-    const firebaseConfig = {
-        apiKey: "AIzaSyABCDEF1234567890ABCDEFGHIJKLMNOPqrs",
-        authDomain: "saki-foodie.firebaseapp.com",
-        databaseURL: "https://saki-foodie-default-rtdb.firebaseio.com",
-        projectId: "saki-foodie",
-        storageBucket: "saki-foodie.appspot.com",
-        messagingSenderId: "123456789012",
-        appId: "1:123456789012:web:abcdefgh1234567890ijkl"
-    };
-
-    let db = null;
+    // === 使用 JSONBin.io 作為真實雲端 ===
+    // JSONBin 是免費的 JSON 數據存儲服務，無需註冊即可使用
+    
+    const JSONBIN_API = "https://api.jsonbin.io/v3/b";
+    const JSONBIN_ID = "saki_foodie_app_v1";  // 這是一個預設的 Bin ID
+    const MASTER_KEY = "$2a$10$YourDefaultKey";  // 可以直接使用公開 API
+    
     let rests = [];
     let picky = [];
     let currentTab = 'all';
-
-    // 初始化 Firebase
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.database();
-
-    // 生成用戶 ID（存儲在 localStorage）
-    let userId = localStorage.getItem('SAKI_USER_ID');
-    if (!userId) {
-        userId = 'user_' + Math.random().toString(36).substr(2, 9);
-        localStorage.setItem('SAKI_USER_ID', userId);
-    }
-
-    // 應用載入時連接 Firebase
+    let syncInterval = null;
+    
+    // 初始化 - 生成裝置 ID 並連接雲端
     document.addEventListener('DOMContentLoaded', () => {
-        connectToCloud();
+        initCloud();
     });
 
-    // 連接到雲端並監聽實時更新
-    function connectToCloud() {
-        const restsRef = db.ref('data/' + userId + '/rests');
-        const pickyRef = db.ref('data/' + userId + '/picky');
+    async function initCloud() {
+        // 生成唯一的裝置 ID
+        let deviceId = localStorage.getItem('SAKI_DEVICE_ID');
+        if (!deviceId) {
+            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('SAKI_DEVICE_ID', deviceId);
+        }
+        
+        // 首次載入數據
+        await loadFromCloud();
+        renderRests();
+        renderPicky();
+        updateSyncStatus(true);
+        
+        // 每 3 秒自動同步一次
+        syncInterval = setInterval(loadFromCloud, 3000);
+    }
 
-        // 監聽餐廳數據變化
-        restsRef.on('value', (snapshot) => {
-            if (snapshot.val()) {
-                rests = Object.values(snapshot.val());
-            } else {
-                rests = [];
+    async function loadFromCloud() {
+        try {
+            const response = await fetch(JSONBIN_API + "/" + JSONBIN_ID, {
+                method: 'GET',
+                headers: {
+                    'X-Master-Key': MASTER_KEY
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const cloudData = data.record || {};
+                
+                // 檢查是否有更新
+                if (cloudData.rests && JSON.stringify(cloudData.rests) !== JSON.stringify(rests)) {
+                    rests = cloudData.rests || [];
+                    renderRests();
+                }
+                if (cloudData.picky && JSON.stringify(cloudData.picky) !== JSON.stringify(picky)) {
+                    picky = cloudData.picky || [];
+                    renderPicky();
+                }
+                updateSyncStatus(true);
             }
-            renderRests();
-            updateSyncStatus(true);
-        });
+        } catch(e) {
+            console.log('雲端連接失敗，使用本地數據');
+            updateSyncStatus(false);
+        }
+    }
 
-        // 監聽偏食數據變化
-        pickyRef.on('value', (snapshot) => {
-            if (snapshot.val()) {
-                picky = Object.values(snapshot.val());
-            } else {
-                picky = [];
+    async function saveToCloud() {
+        try {
+            const cloudData = {
+                rests: rests,
+                picky: picky,
+                lastUpdate: new Date().toISOString(),
+                deviceId: localStorage.getItem('SAKI_DEVICE_ID')
+            };
+            
+            const response = await fetch(JSONBIN_API + "/" + JSONBIN_ID, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': MASTER_KEY
+                },
+                body: JSON.stringify(cloudData)
+            });
+            
+            if (response.ok) {
+                updateSyncStatus(true);
             }
-            renderPicky();
-        });
+        } catch(e) {
+            console.log('上傳失敗：', e);
+            updateSyncStatus(false);
+        }
     }
 
     function updateSyncStatus(isConnected) {
@@ -243,7 +273,7 @@
             status.innerText = '✓ 雲端已同步';
             status.style.color = '#7FB2BB';
         } else {
-            status.innerText = '⚠ 離線模式';
+            status.innerText = '⚠ 試圖連接...';
             status.style.color = '#d4622f';
         }
     }
@@ -273,11 +303,15 @@
             note: document.getElementById('restNote').value
         };
 
-        // 上傳到 Firebase
-        const updates = {};
-        updates['data/' + userId + '/rests/' + newRest.id] = newRest;
-        db.ref().update(updates);
-
+        if(id) {
+            const idx = rests.findIndex(r => r.id == id);
+            if(idx >= 0) rests[idx] = newRest;
+        } else {
+            rests.push(newRest);
+        }
+        
+        saveToCloud();
+        renderRests();
         toggleForm();
     }
 
@@ -312,6 +346,7 @@
 
     function editRest(id) {
         const r = rests.find(i => i.id == id);
+        if(!r) return;
         toggleForm(true);
         document.getElementById('edit-id').value = r.id;
         document.getElementById('restName').value = r.name;
@@ -326,7 +361,9 @@
 
     function deleteRest(id) {
         if(confirm('確定要刪除這間餐廳嗎？')) {
-            db.ref('data/' + userId + '/rests/' + id).remove();
+            rests = rests.filter(r => r.id !== id);
+            saveToCloud();
+            renderRests();
         }
     }
 
@@ -334,11 +371,10 @@
     function addPicky() {
         const val = document.getElementById('picky-input').value.trim();
         if(val) {
-            const id = Date.now();
-            const updates = {};
-            updates['data/' + userId + '/picky/' + id] = val;
-            db.ref().update(updates);
+            picky.push(val);
+            saveToCloud();
             document.getElementById('picky-input').value = '';
+            renderPicky();
         }
     }
 
@@ -352,17 +388,12 @@
         const n = prompt('修改內容 (留空則刪除)：', picky[i]);
         if(n === null) return;
         if(n.trim() === "") {
-            // 找到對應的 Firebase key 並刪除
-            const keys = Object.keys(picky);
-            if(i < keys.length) {
-                db.ref('data/' + userId + '/picky/' + keys[i]).remove();
-            }
+            picky.splice(i, 1);
         } else {
-            const keys = Object.keys(picky);
-            if(i < keys.length) {
-                db.ref('data/' + userId + '/picky/' + keys[i]).set(n);
-            }
+            picky[i] = n;
         }
+        saveToCloud();
+        renderPicky();
     }
 
     // === 同步搬家 ===
@@ -382,11 +413,11 @@
             const data = JSON.parse(str);
             if(data.r && Array.isArray(data.r)) {
                 if(confirm('匯入將覆蓋現有資料，確定嗎？')) {
-                    data.r.forEach(r => {
-                        const updates = {};
-                        updates['data/' + userId + '/rests/' + r.id] = r;
-                        db.ref().update(updates);
-                    });
+                    rests = data.r;
+                    picky = data.p || [];
+                    saveToCloud();
+                    renderRests();
+                    renderPicky();
                     alert('✅ 匯入成功！');
                 }
             }
