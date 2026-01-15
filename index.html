@@ -181,7 +181,35 @@
     let picky = JSON.parse(localStorage.getItem(PICKY_KEY)) || [];
     let currentTab = 'all';
 
-    document.addEventListener('DOMContentLoaded', () => { renderRests(); renderPicky(); });
+    document.addEventListener('DOMContentLoaded', () => { 
+        renderRests(); 
+        renderPicky();
+        startAutoSync();
+    });
+
+    // 自動同步 - 每 2 秒檢查一次本地存儲，若有變化則更新
+    function startAutoSync() {
+        setInterval(() => {
+            const storedRests = localStorage.getItem(DB_KEY);
+            const storedPicky = localStorage.getItem(PICKY_KEY);
+            
+            if(storedRests) {
+                const newRests = JSON.parse(storedRests);
+                if(JSON.stringify(newRests) !== JSON.stringify(rests)) {
+                    rests = newRests;
+                    renderRests();
+                }
+            }
+            
+            if(storedPicky) {
+                const newPicky = JSON.parse(storedPicky);
+                if(JSON.stringify(newPicky) !== JSON.stringify(picky)) {
+                    picky = newPicky;
+                    renderPicky();
+                }
+            }
+        }, 2000);
+    }
 
     // --- 分頁與篩選 ---
     function setTab(tab, btn) {
