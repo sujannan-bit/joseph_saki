@@ -398,6 +398,8 @@ async function saveToSupabase() {
             console.warn('⚠️ 上传失败，已保存到本地:', e.message);
             saveLocalData();
             updateSyncStatus('offline');
+        }
+    }
 
     // ============================================================================
     // 💾 本地存儲函數
