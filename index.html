@@ -6,7 +6,7 @@
     <title>Saki 美食手帳 | Foodie.AI</title>
     
     <!-- Supabase JavaScript SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/+esm"></script>
     
     <style>
         /* CSS 視覺層 - 日系極簡美學 */
@@ -230,16 +230,19 @@
     
     document.addEventListener('DOMContentLoaded', async () => {
         console.log('🚀 应用启动...');
-        // 等待 Supabase SDK 加载（最多等待 5 秒）
-        let retries = 50; // 50 × 100ms = 5秒
+        // 等待 Supabase SDK 加载（最多等待 10 秒）
+        let retries = 100; // 100 × 100ms = 10秒
         while (!window.supabase && retries > 0) {
             await new Promise(resolve => setTimeout(resolve, 100));
             retries--;
         }
         
         if (!window.supabase) {
-            console.error('❌ Supabase SDK 加载失败');
+            console.error('❌ Supabase SDK 加载失败（超时），使用本地模式');
             addDebugLog('❌ Supabase SDK 加载失败，使用本地模式');
+        } else {
+            console.log('✅ Supabase SDK 已加载');
+            addDebugLog('✅ Supabase SDK 已加载');
         }
         
         await initSupabase();
@@ -260,7 +263,14 @@
             // 检查 SDK 是否加载
             if (!window.supabase) {
                 addDebugLog('⚠️ Supabase SDK 未加载，使用本地模式');
-                throw new Error('Supabase SDK 未加载，将使用本地存储');
+                console.log('💾 使用本地存储模式 - Supabase SDK 无法加载');
+                isInitialized = true;
+                loadLocalData();
+                renderRests();
+                renderPicky();
+                updateSyncStatus('offline');
+                addDebugLog('💾 已切换到本地数据模式');
+                return;
             }
             
             console.log('✅ SDK 已加载，初始化客户端...');
