@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Saki 美食手帳 | Foodie.AI</title>
     
-    <!-- Supabase JavaScript SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.0/+esm"></script>
+    <!-- Supabase JavaScript SDK from JSDelivr -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.2"></script>
     
     <style>
         /* CSS 視覺層 - 日系極簡美學 */
@@ -230,6 +230,8 @@
     
     document.addEventListener('DOMContentLoaded', async () => {
         console.log('🚀 应用启动...');
+        addDebugLog('🚀 应用启动...');
+        
         // 等待 Supabase SDK 加载（最多等待 10 秒）
         let retries = 100; // 100 × 100ms = 10秒
         while (!window.supabase && retries > 0) {
@@ -242,7 +244,7 @@
             addDebugLog('❌ Supabase SDK 加载失败，使用本地模式');
         } else {
             console.log('✅ Supabase SDK 已加载');
-            addDebugLog('✅ Supabase SDK 已加载');
+            addDebugLog('✅ Supabase SDK 已加载，版本: ' + (window.supabase.version || '未知'));
         }
         
         await initSupabase();
