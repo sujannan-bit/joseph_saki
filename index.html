@@ -230,6 +230,18 @@
     
     document.addEventListener('DOMContentLoaded', async () => {
         console.log('🚀 应用启动...');
+        // 等待 Supabase SDK 加载（最多等待 5 秒）
+        let retries = 50; // 50 × 100ms = 5秒
+        while (!window.supabase && retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries--;
+        }
+        
+        if (!window.supabase) {
+            console.error('❌ Supabase SDK 加载失败');
+            addDebugLog('❌ Supabase SDK 加载失败，使用本地模式');
+        }
+        
         await initSupabase();
     });
 
@@ -247,7 +259,8 @@
             
             // 检查 SDK 是否加载
             if (!window.supabase) {
-                throw new Error('Supabase SDK 未加载');
+                addDebugLog('⚠️ Supabase SDK 未加载，使用本地模式');
+                throw new Error('Supabase SDK 未加载，将使用本地存储');
             }
             
             console.log('✅ SDK 已加载，初始化客户端...');
